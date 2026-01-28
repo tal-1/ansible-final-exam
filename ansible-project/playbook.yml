@@ -1,0 +1,73 @@
+---
+- name: Manage EC2 Instances based on Tags
+  hosts: aws_ec2
+  become: true
+  gather_facts: true
+
+  vars:
+    my_owner_name: "Molcho"
+
+  tasks:
+    - name: Verify Owner tag matches
+      ansible.builtin.meta: end_host
+      when: ec2_tag_Owner != my_owner_name
+
+    - name: Update hostname based on Name tag
+      ansible.builtin.hostname:
+        name: "{{ ec2_tag_Name }}"
+      when: ec2_tag_Name is defined
+
+    - name: Install required system packages
+      apt:
+        pkg:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+          - python3-requests
+        state: latest
+        update_cache: yes
+
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu noble stable
+        state: present
+
+    - name: Install Docker Engine
+      apt:
+        name: docker-ce
+        state: latest
+        update_cache: yes
+
+    - name: Install Docker Python SDK
+      apt:
+        name: python3-docker
+        state: present
+
+    - name: Deploy Service Container ({{ ec2_tag_Service }})
+      community.docker.docker_container:
+        name: "{{ ec2_tag_Service }}"
+        image: "{{ ec2_tag_DockerImage }}"
+        state: started
+        restart_policy: always
+        ports:
+          - "80:80"     # nginx
+          - "3306:3306" # mysql
+        env:
+           MYSQL_ROOT_PASSWORD: "Password123!"
+      when: ec2_tag_Service != 'none' and ec2_tag_DockerImage != 'none'
+
+    - name: Configure Restart Cron Job
+      ansible.builtin.cron:
+        name: "Scheduled Restart based on AWS Tag"
+        weekday: "{{ ec2_tag_Restart.split(' ')[0][:3] }}"              # regex for day
+        hour: "{{ ec2_tag_Restart.split(' ')[1].split(':')[0] }}"   # regex for hours
+        minute: "{{ ec2_tag_Restart.split(' ')[1].split(':')[1] }}" # regex for minutes
+        job: "/sbin/shutdown -r now"
+      when: ec2_tag_Restart is defined and ec2_tag_Restart != 'none'

@@ -1,0 +1,17 @@
+plugin: amazon.aws.aws_ec2
+regions:
+  - us-east-1
+filters:
+  instance-state-name: running
+  "tag:Owner": Molcho
+keyed_groups:
+  - key: tags.Service
+    prefix: tag_Service
+compose:
+  ansible_host: public_ip_address
+  ec2_tag_Owner: tags.Owner
+  ec2_tag_Name: tags.Name
+  ec2_tag_Service: tags.Service | default('none')
+  ec2_tag_Version: tags.Version | default('latest')
+  ec2_tag_Restart: tags.Restart | default('none')
+  ec2_tag_DockerImage: tags.DockerImage | default('none')
